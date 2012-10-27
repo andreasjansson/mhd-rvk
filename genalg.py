@@ -15,7 +15,7 @@ from copy import copy
 import operator
 import sys, os
 import keydetection
-
+import threading
 import dump_samples
 
 samples = cPickle.load(open('samples.pkl', 'r'))
@@ -106,6 +106,36 @@ def nklang_similarity(a, b):
     return (matches ** 2) + .1
 
 
+class GenAlgThread(threading.Thread):
+
+    def __init__(self, target_index, onsets, target):
+        threading.Thread.__init__(self)
+
+        self.target_index = target_index
+        self.evaluator = Evaluator(target[target_index])
+        self.onsets = onsets
+        self.target = target
+
+    def run(self):
+
+        def initialisator(genome, **args):
+           genome.clearList()
+           for i in xrange(len(samples)):
+              choice = int(round(random.random() * .7))
+              genome.append(choice)
+        
+        genome = G1DBinaryString.G1DBinaryString(len(samples))
+        genome.evaluator.set(self.evaluator.evaluate)
+        genome.initializator.set(initialisator)
+        ga = GSimpleGA.GSimpleGA(genome)
+        ga.setGenerations(100)
+        ga.evolve(freq_stats=10)
+        chromosome = ga.bestIndividual()
+        audio = audio_from_chromosome(chromosome, (self.onsets[self.target_index + 1] - self.onsets[self.target_index]) * 11025)
+        scipy.io.wavfile.write('audio_%d.wav' % self.target_index, 11025, np.array(audio, dtype = np.int16) / 2)
+        cPickle.dump(chromosome.genomeList, open('chromosome.pkl', 'w'))
+
+
 if __name__ == '__main__':
 
     if os.path.exists('target.pkl') and os.path.exists('onsets.pkl'):
@@ -125,30 +155,13 @@ if __name__ == '__main__':
         cPickle.dump(target, open('target.pkl', 'w'))
         cPickle.dump(onsets, open('onsets.pkl', 'w'))
 
-    target_index = int(sys.argv[1])
-    evaluator = Evaluator(target[target_index])
+    start_index = int(sys.argv[1])
+    end_index = int(sys.argv[2])
 
     samples = cPickle.load(open('samples.pkl', 'r'))
 
-    def initialisator(genome, **args):
-       genome.clearList()
-
-       for i in xrange(len(samples)):
-          choice = int(round(random.random() * .7))
-          genome.append(choice)
-
-    genome = G1DBinaryString.G1DBinaryString(len(samples))
-    genome.evaluator.set(evaluator.evaluate)
-    genome.initializator.set(initialisator)
-    ga = GSimpleGA.GSimpleGA(genome)
-    ga.setGenerations(100)
-    ga.evolve(freq_stats=10)
-    chromosome = ga.bestIndividual()
-    audio = audio_from_chromosome(chromosome, (onsets[target_index + 1] - onsets[target_index]) * 11025)
-    scipy.io.wavfile.write('audio_%d.wav' % target_index, 11025, np.array(audio, dtype = np.int16) / 2)
-    cPickle.dump(chromosome.genomeList, open('chromosome.pkl', 'w'))
-
-
+    for i in range(start_index, end_index):
+        GenAlgThread(i, onsets, target).start()
 
 def play_audio(audio, sr):
     filename = 'tmp_play.wav'
