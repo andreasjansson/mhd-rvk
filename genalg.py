@@ -112,7 +112,7 @@ if __name__ == '__main__':
         onsets = cPickle.load(open('onsets.pkl', 'r'))
         target = cPickle.load(open('target.pkl', 'r'))
     else:
-        sr, audio = scipy.io.wavfile.read('fembots.wav')
+        sr, audio = scipy.io.wavfile.read('dancing.wav')
         sr = float(sr)
         audio = audio[:,0]
         onsets = onsetdetection.detect_onsets(audio)
