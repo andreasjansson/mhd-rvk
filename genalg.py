@@ -94,7 +94,7 @@ class Evaluator:
 
         split_indices = np.cumsum([0] + map(len, dump_samples.pitches[:-1]))
         parts = np.split(chromosome.genomeList, split_indices)[1:]
-        max_notes_per_part = [1, 3, 3]
+        max_notes_per_part = [1, 3]
         for part, max_notes in zip(parts, max_notes_per_part):
             if sum(part) > max_notes:
                 return 0
