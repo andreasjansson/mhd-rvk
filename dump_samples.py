@@ -27,10 +27,11 @@ instruments = [
 #    '808'             # Drums/026
     ]
 
-instruments = ['808', 'syn_bass', 'marimba', 'synth']
+instruments = ['syn_bass', 'marimba', 'synth']
 
 #pitches = range(24, 107)
-pitches = ([36, 39, 40, 44, 46], range(36, 48), range(55, 72), range(72, 91))
+#pitches = ([36, 39, 40, 44, 46], range(36, 48), range(55, 72), range(72, 91))
+pitches = (range(36, 48), range(55, 72), range(72, 91))
 pitch_map = [{name: index for index, name in enumerate(pitches_per_instr)} for pitches_per_instr in pitches]
 #velocities = [60, 100, 127]
 #velocities = [60, 127]

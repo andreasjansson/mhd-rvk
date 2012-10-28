@@ -17,6 +17,7 @@ import sys, os
 import keydetection
 import threading
 import dump_samples
+from copy import copy
 
 samples = cPickle.load(open('samples.pkl', 'r'))
 
@@ -56,22 +57,35 @@ def downsample(sig, factor):
     sig2 = [int(x) for i, x in enumerate(sig2) if i % factor == 0]
     return sig2
 
-def audio_from_chromosome(chromosome, length):
+def audio_from_chromosome(chromosome, length, offset = 0):
     audio = np.array([0] * length)
     if sum(chromosome) == 0:
         return audio
 
     for i, cell in enumerate(chromosome):
         if cell:
-            sample = np.array(samples[i][0:length])
+            sample = np.array(samples[i + offset][0:length])
             audio += sample
     return (audio / float(max(audio))) * (2 ** 15)
+
+def chroma_over_pitches(spectrum, pitches, sr):
+    spectrum = copy(spectrum)
+    midi0 = 16.3515978312
+    low = midi0 * math.pow(2.0, pitches[0] / 12.0)
+    high = midi0 * math.pow(2.0, pitches[-1] / 12.0)
+    low_bin = int(math.floor((low / sr) * len(spectrum) * 2))
+    high_bin = int(math.ceil((high / sr) * len(spectrum) * 2))
+    for i in range(0, low_bin) + range(high_bin, len(spectrum)):
+        spectrum[i] = 0
+    return keydetection.Chromagram.from_spectrum(spectrum, 11025)
 
 class Evaluator:
 
     def __init__(self, target_spectrum):
         self.target_spectrum = target_spectrum
-        self.target_nklang = keydetection.Chromagram.from_spectrum(filter_spectrum(target_spectrum), 11025).get_nklang()
+        filtered_spectrum = filter_spectrum(target_spectrum)
+        self.target_chromagrams = [chroma_over_pitches(filtered_spectrum, pitches, 11025)
+                                   for pitches in dump_samples.pitches]
 
     def evaluate(self, chromosome):
 
@@ -79,21 +93,21 @@ class Evaluator:
             return 0
 
         split_indices = np.cumsum([0] + map(len, dump_samples.pitches[:-1]))
-        parts = np.split(chromosome.genomeList, split_indices)
-        max_notes_per_part = [3, 1, 3, 3]
+        parts = np.split(chromosome.genomeList, split_indices)[1:]
+        max_notes_per_part = [1, 3, 3]
         for part, max_notes in zip(parts, max_notes_per_part):
             if sum(part) > max_notes:
                 return 0
 
-        audio = audio_from_chromosome(chromosome, len(self.target_spectrum) * 2)
-        spectrum = get_spectrum(audio)
+        total_similarity = 0
+        for i, part in enumerate(parts):
+            audio = audio_from_chromosome(part, len(self.target_spectrum) * 2, split_indices[i])
+            spectrum = get_spectrum(audio)
+            chromagram = chroma_over_pitches(spectrum, dump_samples.pitches[i], 11025)
+            similarity = chromagram_similarity(self.target_chromagrams[i], chromagram)
+            total_similarity += similarity
 
-        filtered_spectrum = filter_spectrum(spectrum)
-        nklang = keydetection.Chromagram.from_spectrum(filtered_spectrum, 11025).get_nklang()
-        
-        similarity = nklang_similarity(nklang, self.target_nklang) * spectrum_similarity(spectrum, self.target_spectrum)
-
-        return similarity
+        return total_similarity
 
 
 def filter_spectrum(spectrum):
@@ -105,6 +119,10 @@ def nklang_similarity(a, b):
     matches = np.sum(np.sort(a.notes) == np.sort(b.notes))
     return (matches ** 2) + .1
 
+def chromagram_similarity(a, b):
+    a = a.values / max(a.values)
+    b = b.values / max(b.values)
+    return np.sum(np.power(np.abs(np.subtract(a, b)), 2))
 
 class GenAlgThread(threading.Thread):
 
@@ -157,8 +175,6 @@ if __name__ == '__main__':
 
     start_index = int(sys.argv[1])
     end_index = int(sys.argv[2])
-
-    samples = cPickle.load(open('samples.pkl', 'r'))
 
     for i in range(start_index, end_index):
         GenAlgThread(i, onsets, target).start()
